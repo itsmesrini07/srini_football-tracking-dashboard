@@ -12,3 +12,6 @@ Modules:
 - PDF and Excel export
 
 Upload match JSON, tracking JSONL, pitch image, optional events and optional video in the browser.
+
+Created by Srinivas Arulmoli
+Football Tracking & Tactical Intelligence Dashboard
