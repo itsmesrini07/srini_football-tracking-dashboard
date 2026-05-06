@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Football Tracking</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6.0.4/dist/d3-delaunay.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    :root{
+      --bg:#f6f7f9;
+      --panel:#fff;
+      --line:#dfe4ea;
+      --text:#1f2937;
+      --muted:#65758b;
+      --blue:#0066ff;
+      --orange:#ff9800;
+      --green:#28a745;
+      --red:#dc3545;
+      --home:#0066ff;
+      --away:#ff2b2b;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    header{max-width:1260px;margin:16px auto 0;padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand h1{margin:0;font-size:23px;font-weight:900;letter-spacing:-.02em;color:#111827}
+    .badge{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--line);background:#fff;border-radius:999px;color:var(--muted);font-size:12px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+    .app{max-width:1260px;margin:0 auto;padding:16px;display:grid;gap:16px}
+    .panel{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    .controls{padding:16px;display:grid;grid-template-columns:repeat(5,minmax(160px,1fr));gap:12px;align-items:end}
+    .section-title{grid-column:1/-1;font-size:13px;color:#333;font-weight:900;margin:0 0 2px}
+    .field{display:grid;gap:6px}
+    label{font-size:12px;color:#333;font-weight:800}
+    input,select,button{font:inherit;border-radius:8px;border:1px solid #ccc;background:#fff;color:#1f2937;padding:8px 10px;outline:none;font-size:13px}
+    input[type=file]{width:100%;font-size:12px}
+    input[type=color]{width:52px;height:36px;padding:0;cursor:pointer}
+    button{cursor:pointer;background:var(--blue);border:0;color:#fff;font-weight:900;transition:background .15s,transform .12s}
+    button:hover{background:#0052cc;transform:translateY(-1px)}
+    button.secondary{background:#fff;border:1px solid #ccc;color:#333}
+    button.secondary:hover{background:#f3f5f8}
+    button.green{background:var(--green)} button.green:hover{background:#218838}
+    button.orange{background:var(--orange)} button.orange:hover{background:#e68a00}
+    button.red{background:var(--red)} button.red:hover{background:#c82333}
+    button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+    .status{grid-column:1/-1;background:#eef5ff;color:#555;border-left:4px solid var(--blue);border-radius:8px;padding:10px 12px;font-size:13px;min-height:40px}
+    .pillbar{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+    .pill{background:#fff;border:1px solid #ccc;color:#333;padding:8px 12px;border-radius:8px;font-weight:900}
+    .pill.active{background:var(--blue);border-color:var(--blue);color:#fff}
+    .colors{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .metric{padding:14px;min-height:92px}
+    .metric .k{color:#555;font-size:12px;font-weight:800}
+    .metric .v{font-size:22px;font-weight:900;margin-top:8px;color:#111;letter-spacing:-.02em}
+    .metric .s{font-size:12px;color:#666;margin-top:4px}
+    .workbench{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+    .pitch-panel{padding:14px}
+    .toolbar{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+    .time-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+    .time-controls .field input,.time-controls .field select{width:78px}
+    canvas{width:100%;height:auto;display:block;border-radius:10px;background:#0b7a2a;border:1px solid #ddd;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+    .side{display:grid;gap:16px}
+    .analysis{padding:14px}
+    .player-select{width:100%;margin-bottom:12px}
+    .player-card{background:#fbfcff;border:1px solid #e8edf4;border-radius:10px;padding:12px;margin-bottom:12px}
+    .player-name{font-size:18px;font-weight:900;margin-bottom:3px;color:#111}
+    .player-role{font-size:12px;color:#666}
+    .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+    .stat{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px}
+    .stat b{display:block;font-size:19px;color:#111}
+    .stat span{font-size:11px;color:#666}
+    .three-panel{padding:14px}
+    .three-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+    #threeContainer{height:360px;border:1px solid #ddd;border-radius:10px;background:#101820;overflow:hidden;touch-action:none}
+    .three-controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:end}
+    .three-controls .field input{width:74px}
+    .video-panel{padding:14px;display:grid;gap:10px}
+    video{width:100%;border-radius:10px;border:1px solid #ddd;background:#000;max-height:360px}
+    .video-row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+    .video-row .field input{width:96px}
+    .table-panel{padding:14px}
+    table{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
+    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;color:#222}
+    th{background:#f6f6f6;color:#555;font-size:11px;font-weight:900}
+    tr:hover td{background:#fafafa}
+    .table-scroll{max-height:430px;overflow:auto;border-radius:10px;border:1px solid #eee}
+    .note{color:#555;font-size:12px;line-height:1.45;background:#eef5ff;border-left:4px solid var(--blue);padding:10px 12px;border-radius:8px;margin-top:12px}
+    @media(max-width:1120px){.controls{grid-template-columns:1fr 1fr}.workbench{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}}
+    @media(max-width:680px){header{display:block}.controls,.metrics{grid-template-columns:1fr}.time-controls,.video-row{display:grid;grid-template-columns:1fr 1fr}.workbench{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand"><h1>Football Tracking</h1></div>
+  <div class="badge" id="matchBadge">Ready</div>
+</header>
+
+<div class="app">
+  <section class="panel controls">
+    <div class="section-title">Match Setup</div>
+    <div class="field"><label>Match</label><input id="matchFile" type="file" accept=".json,application/json"></div>
+    <div class="field"><label>Tracking</label><input id="trackingFile" type="file" accept=".jsonl,.txt,application/json"></div>
+    <div class="field"><label>Pitch Image</label><input id="pitchImgFile" type="file" accept="image/png,image/jpeg"></div>
+    <div class="field"><label>Events Optional</label><input id="eventFile" type="file" accept=".csv,.xlsx,.json,.txt"></div>
+    <div class="field"><label>Video Optional</label><input id="videoFile" type="file" accept="video/*"></div>
+
+    <div class="colors">
+      <div class="field"><label>Home</label><input id="homeColor" type="color" value="#0066ff"></div>
+      <div class="field"><label>Away</label><input id="awayColor" type="color" value="#ff2b2b"></div>
+      <button id="loadBtn">Load Data</button>
+    </div>
+
+    <div class="pillbar">
+      <button class="pill active" id="modePositions">Positions</button>
+      <button class="pill" id="modeVelocity">Velocity</button>
+      <button class="pill" id="modeVoronoi">Voronoi</button>
+    </div>
+
+    <div class="pillbar">
+      <button id="exportPdf" class="green" disabled>PDF</button>
+      <button id="exportXlsx" class="orange" disabled>Excel</button>
+      <button id="record2d" class="red" disabled>REC 2D</button>
+      <button id="record3d" class="red" disabled>REC 3D</button>
+    </div>
+
+    <div class="status" id="status">Waiting for files...</div>
+  </section>
+
+  <section class="metrics">
+    <div class="panel metric"><div class="k">Fastest Player</div><div class="v" id="fastestName">—</div><div class="s" id="fastestValue">Top speed</div></div>
+    <div class="panel metric"><div class="k">Max Acceleration</div><div class="v" id="accelName">—</div><div class="s" id="accelValue">Peak m/s²</div></div>
+    <div class="panel metric"><div class="k">Total Distance</div><div class="v" id="distanceName">—</div><div class="s" id="distanceValue">Highest distance</div></div>
+    <div class="panel metric"><div class="k">Pass Completion</div><div class="v" id="passValue">—</div><div class="s" id="passNote">Event file optional</div></div>
+  </section>
+
+  <section class="workbench">
+    <div class="panel pitch-panel">
+      <div class="toolbar">
+        <div><div class="section-title">Pitch View</div><div class="badge" id="timeBadge">Frame —</div></div>
+        <div class="time-controls">
+          <div class="field"><label>Period</label><select id="periodSelect"><option value="1">1</option><option value="2">2</option></select></div>
+          <div class="field"><label>Minute</label><input id="minuteInput" type="number" value="0" min="0"></div>
+          <div class="field"><label>Second</label><input id="secondInput" type="number" value="0" min="0" max="59"></div>
+          <div class="field"><label>Step</label><input id="tenthInput" type="number" value="0" min="0" max="9"></div>
+          <button id="goTime" class="secondary" disabled>Go</button>
+          <button id="prevFrame" class="secondary" disabled>-0.1s</button>
+          <button id="nextFrame" class="secondary" disabled>+0.1s</button>
+          <button id="playTracking" class="secondary" disabled>Play</button>
+          <button id="stopTracking" class="secondary" disabled>Stop</button>
+        </div>
+      </div>
+      <canvas id="pitchCanvas" width="1400" height="907"></canvas>
+    </div>
+
+    <aside class="side">
+      <div class="panel analysis">
+        <div class="section-title">Player Performance</div>
+        <select id="playerSelect" class="player-select" disabled></select>
+        <div class="player-card">
+          <div class="player-name" id="selectedPlayerName">No player selected</div>
+          <div class="player-role" id="selectedPlayerRole">Load tracking data first</div>
+          <div class="statgrid">
+            <div class="stat"><b id="pTopSpeed">—</b><span>Top speed km/h</span></div>
+            <div class="stat"><b id="pAvgSpeed">—</b><span>Avg speed km/h</span></div>
+            <div class="stat"><b id="pAccel">—</b><span>Max accel m/s²</span></div>
+            <div class="stat"><b id="pAngle">—</b><span>Avg angle change °</span></div>
+            <div class="stat"><b id="pDistance">—</b><span>Total distance m</span></div>
+            <div class="stat"><b id="pPass">—</b><span>Pass completion</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel three-panel">
+        <div class="three-head"><div class="section-title">3D View</div><div class="badge" id="threeBadge">3D ready</div></div>
+        <div id="threeContainer"></div>
+        <div class="three-controls">
+          <button id="resetCamera" class="secondary">Reset Camera</button>
+          <div class="field"><label>Height</label><input id="camHeight" type="number" value="62" step="1"></div>
+          <div class="field"><label>Zoom</label><input id="camZoom" type="number" value="70" step="1"></div>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="panel video-panel">
+    <div class="section-title">Video</div>
+    <video id="videoPlayer" controls></video>
+    <div class="video-row">
+      <div class="field"><label>Video Start (s)</label><input id="videoStart" type="number" value="0" min="0" step="0.1"></div>
+      <div class="field"><label>Duration (s)</label><input id="clipDuration" type="number" value="10" min="1" max="120" step="1"></div>
+      <button id="playClip" class="secondary" disabled>Play Clip</button>
+      <button id="playTrackingClip" class="secondary" disabled>Play Tracking Duration</button>
+    </div>
+  </section>
+
+  <section class="panel table-panel">
+    <div class="section-title">Leaderboard</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>Player</th><th>Team</th><th>Top Speed</th><th>Avg Speed</th><th>Max Accel</th><th>Distance</th><th>Angle Change</th><th>Pass %</th></tr></thead>
+        <tbody id="leaderboardBody"><tr><td colspan="9">No data loaded</td></tr></tbody>
+      </table>
+    </div>
+    <div class="note">Pass completion appears when an event/pass file is added.</div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const canvas = $('pitchCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const PITCH_W = 105, PITCH_H = 68;
+  const scaleX = canvas.width / PITCH_W;
+  const scaleY = canvas.height / PITCH_H;
+
+  let match = null;
+  let pitchImg = null;
+  let rawFrames = [];
+  let players = new Map();
+  let playerByTrackable = new Map();
+  let playerMetrics = [];
+  let passMetrics = new Map();
+  let currentFrameIndex = -1;
+  let currentFrameRows = [];
+  let currentMode = 'positions';
+  let trackingFps = 10;
+  let playbackTimer = null;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+
+  let scene, camera, renderer, controls3d;
+  let playerObjects = new Map();
+  let ballObject = null;
+  let selectedRing = null;
+  let threeReady = false;
+
+  function setStatus(msg, good=false){
+    $('status').textContent = msg;
+    $('status').style.color = good ? '#0d652d' : '#555';
+  }
+
+  function escapeHtml(str){return String(str ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+  function hexToRgba(hex,a){const h=String(hex).replace('#','');const r=parseInt(h.slice(0,2),16)||0,g=parseInt(h.slice(2,4),16)||0,b=parseInt(h.slice(4,6),16)||0;return `rgba(${r},${g},${b},${a})`;}
+  function hexToThree(hex){return new THREE.Color(hex || '#888888');}
+  function getTeamName(teamId){
+    if(!match) return String(teamId);
+    if(teamId === match.home_team?.id) return match.home_team?.short_name || match.home_team?.name || 'Home';
+    if(teamId === match.away_team?.id) return match.away_team?.short_name || match.away_team?.name || 'Away';
+    return String(teamId);
+  }
+  function getTeamColor(teamId){return teamId === match?.home_team?.id ? $('homeColor').value : $('awayColor').value;}
+  function toCanvasXY(x,y){return [(x + 52.5) * scaleX, (34 - y) * scaleY];}
+  function toSceneXY(x,y){return {x:x, z:-y};}
+  function periodStartFrame(period){const mp=(match?.match_periods||[]).find(p=>Number(p.period)===Number(period));return mp ? Number(mp.start_frame || 0) : 0;}
+  function inferFps(){
+    const mps = match?.match_periods || [];
+    for(const p of mps){
+      const frames = Number(p.duration_frames || 0);
+      const mins = Number(p.duration_minutes || 0);
+      if(frames > 0 && mins > 0) return frames / (mins * 60);
+    }
+    return 10;
+  }
+  function frameElapsedSeconds(fr){return Math.max(0, (Number(fr.frame)-periodStartFrame(fr.period)) / trackingFps);}
+  function formatClock(seconds){const m=Math.floor(seconds/60);const s=Math.floor(seconds%60);const t=Math.floor((seconds-Math.floor(seconds))*10);return `${m}:${String(s).padStart(2,'0')}.${t}`;}
+
+  function drawPitchBase(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(pitchImg){ctx.drawImage(pitchImg,0,0,canvas.width,canvas.height);return;}
+    ctx.fillStyle = '#0b7a2a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
+    ctx.strokeRect(0,0,canvas.width,canvas.height);
+    ctx.beginPath(); ctx.moveTo(canvas.width/2,0); ctx.lineTo(canvas.width/2,canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.arc(canvas.width/2,canvas.height/2,9.15*scaleX,0,Math.PI*2); ctx.stroke();
+    ctx.strokeRect(0, (canvas.height-40.32*scaleY)/2, 16.5*scaleX, 40.32*scaleY);
+    ctx.strokeRect(canvas.width-16.5*scaleX, (canvas.height-40.32*scaleY)/2, 16.5*scaleX, 40.32*scaleY);
+  }
+
+  function parseMatch(text){
+    match = JSON.parse(text);
+    players.clear(); playerByTrackable.clear();
+    (match.players || []).forEach(p => {
+      const obj = {id:p.id, trackable:p.trackable_object, name:p.short_name || [p.first_name,p.last_name].filter(Boolean).join(' ') || `Player ${p.id}`, team_id:p.team_id, number:p.number, role:p.player_role?.name || p.player_role?.position_group || ''};
+      players.set(p.id, obj); playerByTrackable.set(p.trackable_object, obj);
+    });
+    trackingFps = inferFps();
+    $('matchBadge').textContent = `${match.home_team?.name || 'Home'} vs ${match.away_team?.name || 'Away'}`;
+  }
+
+  function parseTracking(text){
+    rawFrames = [];
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    for(const line of lines){
+      let obj; try{obj=JSON.parse(line);}catch(e){continue;}
+      const frame = Number(obj.frame ?? obj.frame_id ?? obj.frameIdx);
+      const period = Number(obj.period || 1);
+      if(!Number.isFinite(frame)) continue;
+      const rows = [];
+      for(const pd of (obj.player_data || [])){
+        const x=Number(pd.x), y=Number(pd.y);
+        if(!Number.isFinite(x)||!Number.isFinite(y)) continue;
+        const pid = pd.player_id;
+        const tr = pd.trackable_object;
+        const info = players.get(pid) || playerByTrackable.get(tr) || {};
+        rows.push({type:'player', frame, period, player_id:pid ?? info.id ?? tr, trackable:tr, player:info.name || `Player ${pid ?? tr}`, team_id:info.team_id ?? pd.team_id, role:info.role || '', x,y});
+      }
+      if(obj.ball_data && obj.ball_data.is_detected !== false && obj.ball_data.x != null && obj.ball_data.y != null){
+        rows.push({type:'ball', frame, period, player_id:'ball', player:'Ball', team_id:'ball', role:'', x:Number(obj.ball_data.x), y:Number(obj.ball_data.y)});
+      }
+      if(rows.length) rawFrames.push({frame,period,rows});
+    }
+    rawFrames.sort((a,b)=>(a.period-b.period)||(a.frame-b.frame));
+  }
+
+  async function parseEvents(file){
+    passMetrics.clear();
+    if(!file) return;
+    const attempts = new Map(), completed = new Map();
+    const add = (name, ok) => {if(!name) return; attempts.set(name,(attempts.get(name)||0)+1); if(ok) completed.set(name,(completed.get(name)||0)+1);};
+    const clean = v => String(v ?? '').trim();
+    try{
+      if(file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')){
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data,{type:'array'});
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+        rows.forEach(r => {
+          const keys = Object.keys(r);
+          const pk = keys.find(k => /player|jugador|name/i.test(k));
+          const okk = keys.find(k => /outcome|result|complete|success|pass/i.test(k));
+          if(!pk) return;
+          const out = clean(okk ? r[okk] : '');
+          add(clean(r[pk]), /complete|success|completed|true|1|ok|successful/i.test(out));
+        });
+      }else{
+        const text = await file.text();
+        const lines = text.trim().split(/\r?\n/);
+        const headers = lines[0].split(',').map(h=>h.trim().toLowerCase());
+        const pidx = headers.findIndex(h=>/player|jugador|name/.test(h));
+        const oidx = headers.findIndex(h=>/outcome|result|complete|success|pass/.test(h));
+        for(let i=1;i<lines.length;i++){
+          const cols = lines[i].split(',');
+          const out = clean(cols[oidx]);
+          add(clean(cols[pidx]), /complete|success|completed|true|1|ok|successful/i.test(out));
+        }
+      }
+      for(const [p,a] of attempts){passMetrics.set(p,{attempts:a, completed:completed.get(p)||0, pct:100*(completed.get(p)||0)/a});}
+    }catch(e){console.warn(e);}
+  }
+
+  function computeMetrics(){
+    const perPlayer = new Map();
+    for(const fr of rawFrames){for(const r of fr.rows){if(r.type!=='player') continue;if(!perPlayer.has(r.player_id)) perPlayer.set(r.player_id,[]);perPlayer.get(r.player_id).push(r);}}
+    playerMetrics = [];
+    for(const [pid, arr] of perPlayer){
+      arr.sort((a,b)=>(a.period-b.period)||(a.frame-b.frame));
+      let distance=0, speeds=[], accels=[], angles=[], prevSpeed=null, prevAngle=null;
+      for(let i=1;i<arr.length;i++){
+        const a=arr[i-1], b=arr[i]; if(a.period!==b.period) continue;
+        const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy), frameDiff=Math.max(1,(b.frame-a.frame)||1), dt=frameDiff/trackingFps;
+        const speed=dist/dt;
+        if(speed<13.5){distance+=dist; speeds.push(speed);} // avoids bad spikes
+        if(prevSpeed!==null){const ac=Math.abs(speed-prevSpeed)/dt; if(ac<14) accels.push(ac);}
+        const angle=Math.atan2(dy,dx)*180/Math.PI;
+        if(prevAngle!==null){let diff=Math.abs(angle-prevAngle); if(diff>180) diff=360-diff; if(Number.isFinite(diff)) angles.push(diff);}
+        prevSpeed=speed; prevAngle=angle;
+      }
+      const first=arr[0] || {}, name=first.player || String(pid), pass=passMetrics.get(name);
+      playerMetrics.push({player_id:pid, player:name, team_id:first.team_id, team:getTeamName(first.team_id), role:first.role||'', top_speed:speeds.length?Math.max(...speeds)*3.6:0, avg_speed:speeds.length?speeds.reduce((a,b)=>a+b,0)/speeds.length*3.6:0, max_accel:accels.length?Math.max(...accels):0, distance, angle_change:angles.length?angles.reduce((a,b)=>a+b,0)/angles.length:0, pass_pct:pass?pass.pct:null, pass_text:pass?`${pass.pct.toFixed(1)}%`:'—'});
+    }
+    playerMetrics.sort((a,b)=>b.top_speed-a.top_speed);
+  }
+
+  function updateCards(){
+    const fastest=[...playerMetrics].sort((a,b)=>b.top_speed-a.top_speed)[0];
+    const accel=[...playerMetrics].sort((a,b)=>b.max_accel-a.max_accel)[0];
+    const dist=[...playerMetrics].sort((a,b)=>b.distance-a.distance)[0];
+    $('fastestName').textContent=fastest?fastest.player.split(' ').slice(-1)[0]:'—';
+    $('fastestValue').textContent=fastest?`${fastest.top_speed.toFixed(1)} km/h · ${fastest.team}`:'Top speed';
+    $('accelName').textContent=accel?accel.player.split(' ').slice(-1)[0]:'—';
+    $('accelValue').textContent=accel?`${accel.max_accel.toFixed(2)} m/s² · ${accel.team}`:'Peak m/s²';
+    $('distanceName').textContent=dist?dist.player.split(' ').slice(-1)[0]:'—';
+    $('distanceValue').textContent=dist?`${dist.distance.toFixed(0)} m · ${dist.team}`:'Highest distance';
+    const withPass=playerMetrics.filter(p=>p.pass_pct!==null);
+    if(withPass.length){const best=withPass.sort((a,b)=>b.pass_pct-a.pass_pct)[0];$('passValue').textContent=`${best.pass_pct.toFixed(1)}%`;$('passNote').textContent=best.player;} else {$('passValue').textContent='—';$('passNote').textContent='Event file optional';}
+  }
+
+  function updateLeaderboard(){
+    const body=$('leaderboardBody'); body.innerHTML='';
+    playerMetrics.forEach((p,i)=>{const tr=document.createElement('tr'); tr.innerHTML=`<td>${i+1}</td><td><b>${escapeHtml(p.player)}</b><br><span style="color:#666;font-size:11px">${escapeHtml(p.role)}</span></td><td>${escapeHtml(p.team)}</td><td>${p.top_speed.toFixed(1)} km/h</td><td>${p.avg_speed.toFixed(1)} km/h</td><td>${p.max_accel.toFixed(2)}</td><td>${p.distance.toFixed(0)} m</td><td>${p.angle_change.toFixed(1)}°</td><td>${p.pass_text}</td>`; body.appendChild(tr);});
+  }
+
+  function updatePlayerSelect(){
+    const sel=$('playerSelect'); sel.innerHTML='';
+    playerMetrics.forEach(p=>{const opt=document.createElement('option'); opt.value=p.player_id; opt.textContent=`${p.player} · ${p.team}`; sel.appendChild(opt);});
+    sel.disabled=playerMetrics.length===0;
+    if(playerMetrics.length) showPlayer(playerMetrics[0].player_id);
+  }
+
+  function showPlayer(pid){
+    const p=playerMetrics.find(x=>String(x.player_id)===String(pid)); if(!p) return;
+    $('selectedPlayerName').textContent=p.player; $('selectedPlayerRole').textContent=`${p.team} · ${p.role}`;
+    $('pTopSpeed').textContent=p.top_speed.toFixed(1); $('pAvgSpeed').textContent=p.avg_speed.toFixed(1); $('pAccel').textContent=p.max_accel.toFixed(2); $('pAngle').textContent=p.angle_change.toFixed(1); $('pDistance').textContent=p.distance.toFixed(0); $('pPass').textContent=p.pass_text;
+    renderFrame();
+  }
+
+  function setFrameByIndex(idx){
+    if(!rawFrames.length) return;
+    currentFrameIndex=Math.max(0,Math.min(rawFrames.length-1,idx));
+    const fr=rawFrames[currentFrameIndex]; currentFrameRows=fr.rows;
+    const elapsed=frameElapsedSeconds(fr);
+    $('timeBadge').textContent=`Period ${fr.period} · ${formatClock(elapsed)} · Frame ${fr.frame}`;
+    $('periodSelect').value=String(fr.period);
+    $('minuteInput').value=Math.floor(elapsed/60); $('secondInput').value=Math.floor(elapsed%60); $('tenthInput').value=Math.floor((elapsed-Math.floor(elapsed))*10);
+    renderFrame(); update3D();
+  }
+
+  function setFrameByClock(){
+    const p=Number($('periodSelect').value), sec=Number($('minuteInput').value)*60+Number($('secondInput').value)+Number($('tenthInput').value)/10;
+    const target=periodStartFrame(p)+Math.round(sec*trackingFps);
+    let best=0, dist=Infinity;
+    rawFrames.forEach((fr,i)=>{if(fr.period!==p) return; const d=Math.abs(fr.frame-target); if(d<dist){dist=d; best=i;}});
+    setFrameByIndex(best);
+  }
+
+  function drawVoronoi(rows){
+    const ps=rows.filter(r=>r.type==='player'); if(ps.length<4 || !window.d3) return;
+    const pts=ps.map(r=>{const [cx,cy]=toCanvasXY(r.x,r.y); return [cx,cy,r];});
+    const delaunay=d3.Delaunay.from(pts,d=>d[0],d=>d[1]);
+    const vor=delaunay.voronoi([0,0,canvas.width,canvas.height]);
+    for(let i=0;i<pts.length;i++){
+      const poly=vor.cellPolygon(i); if(!poly) continue;
+      const r=pts[i][2], col=getTeamColor(r.team_id);
+      ctx.beginPath(); poly.forEach((p,j)=>j?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath();
+      ctx.fillStyle=hexToRgba(col,.24); ctx.strokeStyle=hexToRgba(col,.95); ctx.lineWidth=2.2; ctx.fill(); ctx.stroke();
+    }
+  }
+
+  function drawVelocityVectors(rows){
+    if(currentFrameIndex<=0) return;
+    const prev=rawFrames[currentFrameIndex-1].rows.filter(r=>r.type==='player');
+    const pm=new Map(prev.map(r=>[String(r.player_id),r]));
+    rows.filter(r=>r.type==='player').forEach(r=>{const p=pm.get(String(r.player_id)); if(!p) return; const [cx,cy]=toCanvasXY(r.x,r.y), [px,py]=toCanvasXY(p.x,p.y); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+(cx-px)*5,cy+(cy-py)*5); ctx.strokeStyle='#ff9800'; ctx.lineWidth=2.5; ctx.stroke();});
+  }
+
+  function renderFrame(){
+    drawPitchBase();
+    if(!currentFrameRows.length){ctx.fillStyle='rgba(0,0,0,.45)';ctx.font='bold 26px system-ui';ctx.textAlign='center';ctx.fillText('Load Data',canvas.width/2,canvas.height/2);return;}
+    if(currentMode==='voronoi') drawVoronoi(currentFrameRows);
+    const selected=$('playerSelect').value;
+    currentFrameRows.forEach(r=>{
+      const [cx,cy]=toCanvasXY(r.x,r.y);
+      if(r.type==='ball'){ctx.font='24px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('⚽',cx,cy);return;}
+      const isSel=String(r.player_id)===String(selected); let radius=isSel?11:7;
+      if(currentMode==='velocity'){const m=playerMetrics.find(p=>String(p.player_id)===String(r.player_id)); radius=Math.max(5,Math.min(16,(m?.top_speed||0)/2.2));}
+      ctx.beginPath(); ctx.arc(cx,cy,radius,0,Math.PI*2); ctx.fillStyle=getTeamColor(r.team_id); ctx.fill(); ctx.lineWidth=isSel?4:2; ctx.strokeStyle=isSel?'#ffcc00':'#111'; ctx.stroke();
+      const label=(r.player||'').split(' ').slice(-1)[0]; ctx.font=isSel?'bold 14px system-ui':'bold 12px system-ui'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.lineWidth=4; ctx.strokeStyle='rgba(255,255,255,.95)'; ctx.fillStyle='#111'; ctx.strokeText(label,cx+9,cy-10); ctx.fillText(label,cx+9,cy-10);
+    });
+    if(currentMode==='velocity') drawVelocityVectors(currentFrameRows);
+  }
+
+  function init3D(){
+    const container=$('threeContainer');
+    scene=new THREE.Scene(); scene.background=new THREE.Color(0x101820);
+    camera=new THREE.PerspectiveCamera(50, container.clientWidth/container.clientHeight, .1, 1000);
+    renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); renderer.setPixelRatio(window.devicePixelRatio||1); renderer.setSize(container.clientWidth, container.clientHeight); container.innerHTML=''; container.appendChild(renderer.domElement);
+    controls3d=new THREE.OrbitControls(camera, renderer.domElement); controls3d.enableDamping=true; controls3d.target.set(0,0,0);
+    const amb=new THREE.AmbientLight(0xffffff,.75); scene.add(amb);
+    const dir=new THREE.DirectionalLight(0xffffff,.9); dir.position.set(0,90,40); scene.add(dir);
+    build3DPitch(); resetCamera(); threeReady=true;
+    window.addEventListener('resize',()=>{if(!renderer) return; camera.aspect=container.clientWidth/container.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(container.clientWidth,container.clientHeight);});
+    animate3D();
+  }
+
+  function build3DPitch(){
+    const mat=new THREE.MeshLambertMaterial({color:0x126f34});
+    const pitch=new THREE.Mesh(new THREE.PlaneGeometry(PITCH_W,PITCH_H),mat); pitch.rotation.x=-Math.PI/2; pitch.position.y=0; scene.add(pitch);
+    const lineMat=new THREE.LineBasicMaterial({color:0xffffff});
+    const addLine=(pts)=>{const geo=new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(p[0],.03,p[1]))); scene.add(new THREE.Line(geo,lineMat));};
+    addLine([[-52.5,-34],[52.5,-34],[52.5,34],[-52.5,34],[-52.5,-34]]);
+    addLine([[0,-34],[0,34]]);
+    const circle=[]; for(let i=0;i<=96;i++){const a=i/96*Math.PI*2; circle.push([Math.cos(a)*9.15,Math.sin(a)*9.15]);} addLine(circle);
+    addLine([[-52.5,-20.16],[-36,-20.16],[-36,20.16],[-52.5,20.16]]);
+    addLine([[52.5,-20.16],[36,-20.16],[36,20.16],[52.5,20.16]]);
+  }
+
+  function resetCamera(){
+    if(!camera) return;
+    const h=Number($('camHeight').value)||62, z=Number($('camZoom').value)||70;
+    camera.position.set(0,h,z); camera.lookAt(0,0,0); controls3d?.target.set(0,0,0); controls3d?.update();
+  }
+  function animate3D(){requestAnimationFrame(animate3D); controls3d?.update(); renderer?.render(scene,camera);}
+
+  function makeLabelSprite(text){
+    const c=document.createElement('canvas'); c.width=256; c.height=64; const g=c.getContext('2d');
+    g.font='bold 26px system-ui'; g.lineWidth=6; g.strokeStyle='rgba(255,255,255,.95)'; g.fillStyle='#111'; g.textAlign='center'; g.textBaseline='middle'; g.strokeText(text,128,32); g.fillText(text,128,32);
+    const tex=new THREE.CanvasTexture(c); const mat=new THREE.SpriteMaterial({map:tex,transparent:true}); const sp=new THREE.Sprite(mat); sp.scale.set(8,2,1); return sp;
+  }
+
+  function update3D(){
+    if(!threeReady) return;
+    const selected=String($('playerSelect').value || '');
+    const seen=new Set();
+    currentFrameRows.forEach(r=>{
+      if(r.type==='ball'){
+        if(!ballObject){ballObject=new THREE.Mesh(new THREE.SphereGeometry(.75,24,24),new THREE.MeshLambertMaterial({color:0xffffff})); scene.add(ballObject);}
+        const s=toSceneXY(r.x,r.y); ballObject.position.set(s.x,.9,s.z); return;
+      }
+      const id=String(r.player_id); seen.add(id);
+      let group=playerObjects.get(id);
+      if(!group){
+        group=new THREE.Group();
+        const body=new THREE.Mesh(new THREE.CylinderGeometry(.75,.75,1.8,24),new THREE.MeshLambertMaterial({color:hexToThree(getTeamColor(r.team_id))})); body.position.y=.9; body.name='body'; group.add(body);
+        const head=new THREE.Mesh(new THREE.SphereGeometry(.55,18,18),new THREE.MeshLambertMaterial({color:0xf3c7a0})); head.position.y=2.1; group.add(head);
+        const label=makeLabelSprite((r.player||'').split(' ').slice(-1)[0]); label.position.y=3.2; group.add(label);
+        scene.add(group); playerObjects.set(id,group);
+      }
+      const s=toSceneXY(r.x,r.y); group.position.set(s.x,0,s.z); group.visible=true;
+      const body=group.children.find(x=>x.name==='body'); if(body) body.material.color=hexToThree(getTeamColor(r.team_id));
+      const isSel=id===selected; group.scale.setScalar(isSel?1.35:1);
+      group.traverse(o=>{if(o.material && o.material.emissive) o.material.emissive.setHex(isSel?0x333300:0x000000);});
+    });
+    for(const [id,g] of playerObjects){if(!seen.has(id)) g.visible=false;}
+    if(selected){
+      const g=playerObjects.get(selected);
+      if(g){
+        if(!selectedRing){const ringGeo=new THREE.RingGeometry(1.25,1.65,48); const ringMat=new THREE.MeshBasicMaterial({color:0xffcc00,side:THREE.DoubleSide}); selectedRing=new THREE.Mesh(ringGeo,ringMat); selectedRing.rotation.x=-Math.PI/2; scene.add(selectedRing);}
+        selectedRing.visible=true; selectedRing.position.set(g.position.x,.05,g.position.z);
+      }
+    }else if(selectedRing){selectedRing.visible=false;}
+  }
+
+  function playTrackingDuration(recordCanvas=null, filename='tracking.webm'){
+    if(!rawFrames.length) return;
+    const dur=Number($('clipDuration').value)||10;
+    const start=currentFrameIndex<0?0:currentFrameIndex;
+    const totalSteps=Math.max(1,Math.round(dur*trackingFps));
+    let count=0;
+
+    let rec=null, chunks=[];
+    if(recordCanvas){
+      const stream=recordCanvas.captureStream(30); rec=new MediaRecorder(stream,{mimeType:'video/webm'});
+      rec.ondataavailable=e=>{if(e.data.size) chunks.push(e.data);};
+      rec.onstop=()=>{const blob=new Blob(chunks,{type:'video/webm'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);};
+      rec.start();
+    }
+
+    clearInterval(playbackTimer);
+    playbackTimer=setInterval(()=>{
+      setFrameByIndex(start+count);
+      count++;
+      if(count>totalSteps || start+count>=rawFrames.length){clearInterval(playbackTimer); playbackTimer=null; if(rec) setTimeout(()=>rec.stop(),200);}
+    },1000/trackingFps);
+  }
+
+  $('pitchImgFile').onchange=e=>{const f=e.target.files[0]; if(!f) return; const img=new Image(); img.onload=()=>{pitchImg=img; renderFrame();}; img.src=URL.createObjectURL(f);};
+  $('videoFile').onchange=e=>{const f=e.target.files[0]; if(!f) return; const url=URL.createObjectURL(f); $('videoPlayer').src=url; $('playClip').disabled=false;};
+  $('playClip').onclick=()=>{const v=$('videoPlayer'); if(!v.src) return; const start=Number($('videoStart').value)||0, dur=Number($('clipDuration').value)||10; v.currentTime=start; v.play(); setTimeout(()=>v.pause(),dur*1000);};
+  $('playTrackingClip').onclick=()=>playTrackingDuration();
+  $('playTracking').onclick=()=>playTrackingDuration();
+  $('stopTracking').onclick=()=>{clearInterval(playbackTimer); playbackTimer=null;};
+  $('goTime').onclick=setFrameByClock; $('prevFrame').onclick=()=>setFrameByIndex(currentFrameIndex-1); $('nextFrame').onclick=()=>setFrameByIndex(currentFrameIndex+1);
+  $('playerSelect').onchange=e=>showPlayer(e.target.value);
+  $('resetCamera').onclick=resetCamera; $('camHeight').onchange=resetCamera; $('camZoom').onchange=resetCamera;
+  ['homeColor','awayColor'].forEach(id=>$(id).addEventListener('input',()=>{renderFrame(); update3D();}));
+  function setMode(m){currentMode=m; ['modePositions','modeVelocity','modeVoronoi'].forEach(id=>$(id).classList.remove('active')); if(m==='positions') $('modePositions').classList.add('active'); if(m==='velocity') $('modeVelocity').classList.add('active'); if(m==='voronoi') $('modeVoronoi').classList.add('active'); renderFrame();}
+  $('modePositions').onclick=()=>setMode('positions'); $('modeVelocity').onclick=()=>setMode('velocity'); $('modeVoronoi').onclick=()=>setMode('voronoi');
+
+  $('loadBtn').onclick=async()=>{
+    const mf=$('matchFile').files[0], tf=$('trackingFile').files[0];
+    if(!mf||!tf){setStatus('Choose match and tracking files first.');return;}
+    try{
+      setStatus('Processing tracking data...');
+      parseMatch(await mf.text()); parseTracking(await tf.text()); await parseEvents($('eventFile').files[0]);
+      if(!rawFrames.length) throw new Error('No tracking frames found.');
+      computeMetrics(); updateCards(); updateLeaderboard(); updatePlayerSelect(); setFrameByIndex(0);
+      ['goTime','prevFrame','nextFrame','playTracking','stopTracking','playTrackingClip','exportPdf','exportXlsx','record2d','record3d'].forEach(id=>$(id).disabled=false);
+      setStatus(`Ready · ${rawFrames.length.toLocaleString()} frames · ${playerMetrics.length} players · ${trackingFps.toFixed(1)} Hz`, true);
+    }catch(e){console.error(e); setStatus('Error: '+e.message);}
+  };
+
+  $('exportPdf').onclick=()=>{
+    const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape',unit:'pt',format:'a4'});
+    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Football Tracking Report',28,32);
+    doc.addImage(canvas.toDataURL('image/png',1.0),'PNG',28,52,520,337);
+    doc.setFontSize(10); doc.setFont('helvetica','normal'); let y=68;
+    playerMetrics.slice(0,12).forEach((p,i)=>{doc.text(`${i+1}. ${p.player} | ${p.team} | ${p.top_speed.toFixed(1)} km/h | ${p.distance.toFixed(0)}m | ${p.max_accel.toFixed(2)} m/s²`,570,y); y+=17;});
+    doc.save('football_tracking_report.pdf');
+  };
+
+  $('exportXlsx').onclick=()=>{
+    const rows=playerMetrics.map((p,i)=>({rank:i+1,player:p.player,team:p.team,role:p.role,top_speed_kmh:+p.top_speed.toFixed(2),avg_speed_kmh:+p.avg_speed.toFixed(2),max_acceleration_ms2:+p.max_accel.toFixed(2),distance_m:+p.distance.toFixed(1),avg_angle_change_deg:+p.angle_change.toFixed(2),pass_completion:p.pass_pct===null?'':+p.pass_pct.toFixed(2)}));
+    const ws=XLSX.utils.json_to_sheet(rows), wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'performance'); XLSX.writeFile(wb,'football_tracking_performance.xlsx');
+  };
+  $('record2d').onclick=()=>playTrackingDuration(canvas,'tracking_2d.webm');
+  $('record3d').onclick=()=>playTrackingDuration(renderer?.domElement,'tracking_3d.webm');
+
+  drawPitchBase(); init3D();
+})();
+</script>
+</body>
+</html>
